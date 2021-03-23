@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -19,9 +20,11 @@ var authenticator auth.Authenticator
 var cache store.Cache
 
 func main() {
+	port := os.Getenv("PORT")
+	goGuardian()
 	router := mux.NewRouter()
-	router.HandleFunc("/v1/auth/token", createToken).Methods("GET")
-	router.HandleFunc("/v1/book/{id}", getBookAuthor).Methods("GET")
+	router.HandleFunc("/v1/auth/token", middleware(http.HandlerFunc(createToken))).Methods("GET")
+	router.HandleFunc("/v1/book/{id}", middleware(http.HandlerFunc(getBookAuthor))).Methods("GET")
 	log.Println("server has started, listening at http://127.0.0.1:8080")
 	http.ListenAndServe("127.0.0.1:8080", router)
 }
@@ -50,7 +53,7 @@ func getBookAuthor(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(body))
 }
 
-func validateUser(ctx, context.Context, r *http.Request, userName, password string) (auth.Info, error) {
+func validateUser(ctx context.Context, r *http.Request, userName, password string) (auth.Info, error) {
 	if userName == "medium" && password == "medium" {
 		return auth.NewDefaultUser("medium", "1", nil, nil), nil
 	}
@@ -78,9 +81,23 @@ func verifyToken(ctx context.Context, r *http.Request, tokenString string) (auth
 
 func goGuardian() {
 	authenticator = auth.New()
-	cache = store.NewFIFO(context.Background(), time.Minute * 5)
+	cache = store.NewFIFO(context.Background(), time.Minute*5)
 	basicStrategy := basic.New(validateUser, cache)
 	tokenStrategy := bearer.New(verifyToken, cache)
 	authenticator.EnableStrategy(basic.StrategyKey, basicStrategy)
 	authenticator.EnableStrategy(bearer.CachedStrategyKey, tokenStrategy)
+}
+
+func middleware(next http.Handler) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("Executing Auth Middleware")
+		user, err := authenticator.Authenticate(r)
+		if err != nil {
+			code := http.StatusUnauthorized
+			http.Error(w, http.StatusText(code), code)
+			return
+		}
+		log.Println("User %s Authenticated\n", user.UserName())
+		next.ServeHTTP(w, r)
+	})
 }
