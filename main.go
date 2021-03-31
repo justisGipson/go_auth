@@ -25,8 +25,8 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/v1/auth/token", middleware(http.HandlerFunc(createToken))).Methods("GET")
 	router.HandleFunc("/v1/book/{id}", middleware(http.HandlerFunc(getBookAuthor))).Methods("GET")
-	log.Println("server has started, listening at http://127.0.0.1:8080")
-	http.ListenAndServe("127.0.0.1:8080", router)
+	log.Printf("server has started, listening at http://127.0.0.1:%s", port)
+	http.ListenAndServe("127.0.0.1:"+port, router)
 }
 
 func createToken(w http.ResponseWriter, r *http.Request) {
@@ -97,7 +97,7 @@ func middleware(next http.Handler) http.HandlerFunc {
 			http.Error(w, http.StatusText(code), code)
 			return
 		}
-		log.Println("User %s Authenticated\n", user.UserName())
+		log.Printf("User %s Authenticated\n", user.UserName())
 		next.ServeHTTP(w, r)
 	})
 }
